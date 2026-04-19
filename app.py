@@ -265,6 +265,7 @@ def update_charts(contract_value: str):
         make_pie_chart(filtered),
     )
 
+app = Dash(__name__)
 server = app.server
 
 if __name__ == "__main__":
