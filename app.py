@@ -1,6 +1,7 @@
 # =========================================
 # TELCO CUSTOMER CHURN DASHBOARD
 # =========================================
+import os
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -10,15 +11,15 @@ from dash import Dash, html, dcc, Input, Output
 # CONSTANTS & THEME
 # =========================================
 COLORS = {
-    "primary":    "#3266ad",
-    "danger":     "#A32D2D",
-    "warning":    "#BA7517",
-    "success":    "#0F6E56",
-    "bg":         "#F8F8F6",
-    "card_bg":    "#FFFFFF",
-    "text":       "#2C2C2A",
-    "muted":      "#888780",
-    "border":     "#D3D1C7",
+    "primary":  "#3266ad",
+    "danger":   "#A32D2D",
+    "warning":  "#BA7517",
+    "success":  "#0F6E56",
+    "bg":       "#F8F8F6",
+    "card_bg":  "#FFFFFF",
+    "text":     "#2C2C2A",
+    "muted":    "#888780",
+    "border":   "#D3D1C7",
 }
 
 CHART_LAYOUT = dict(
@@ -33,12 +34,33 @@ CHART_LAYOUT = dict(
 # =========================================
 # LOAD & CLEAN DATA
 # =========================================
-def load_data(path: str = "WA_Fn-UseC_-Telco-Customer-Churn.csv") -> pd.DataFrame:
-    df = pd.read_csv(path)
+# Priority order:
+#  1. CSV_URL environment variable  (set this in Render → Environment)
+#  2. Local file next to app.py     (for local dev)
+CSV_URL = os.environ.get(
+    "CSV_URL",
+    # ✏️  REPLACE THIS with your own GitHub raw URL if you don't use an env var
+    "https://raw.githubusercontent.com/Ramsaivakkapatla/FUTURE_DS_02/refs/heads/main/WA_Fn-UseC_-Telco-Customer-Churn.csv"
+)
+LOCAL_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "WA_Fn-UseC_-Telco-Customer-Churn.csv")
+
+
+def load_data() -> pd.DataFrame:
+    # Try local file first (fast), then remote URL
+    source = LOCAL_CSV if os.path.exists(LOCAL_CSV) else CSV_URL
+    try:
+        df = pd.read_csv(source)
+    except Exception as e:
+        raise RuntimeError(
+            f"Could not load CSV from '{source}'. "
+            "Set the CSV_URL environment variable in Render to a public URL of your dataset. "
+            f"Original error: {e}"
+        )
+
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
-    # FIX 1: Avoid ChainedAssignmentError — assign directly instead of inplace on a chained ref
     df["TotalCharges"] = df["TotalCharges"].fillna(df["TotalCharges"].median())
     df["Churn"] = df["Churn"].map({"Yes": 1, "No": 0})
+
     bins   = [0, 3, 12, 24, 60, 100]
     labels = ["0–3m", "3–12m", "1–2y", "2–5y", "5y+"]
     df["TenureGroup"] = pd.cut(df["tenure"], bins=bins, labels=labels)
@@ -61,10 +83,7 @@ avg_monthly_charge = round(df["MonthlyCharges"].mean(), 2)
 def make_contract_chart(filtered_df: pd.DataFrame) -> go.Figure:
     data = (
         filtered_df.groupby("Contract")["Churn"]
-        .mean()
-        .mul(100)
-        .round(1)
-        .reset_index()
+        .mean().mul(100).round(1).reset_index()
     )
     fig = px.bar(
         data, x="Contract", y="Churn",
@@ -80,10 +99,7 @@ def make_contract_chart(filtered_df: pd.DataFrame) -> go.Figure:
 def make_tenure_chart(filtered_df: pd.DataFrame) -> go.Figure:
     data = (
         filtered_df.groupby("TenureGroup", observed=True)["Churn"]
-        .mean()
-        .mul(100)
-        .round(1)
-        .reset_index()
+        .mean().mul(100).round(1).reset_index()
     )
     colors = [COLORS["danger"], COLORS["warning"], COLORS["primary"],
               COLORS["success"], COLORS["muted"]]
@@ -128,26 +144,21 @@ def make_pie_chart(filtered_df: pd.DataFrame) -> go.Figure:
 # =========================================
 # HELPER: KPI CARD
 # =========================================
-def kpi_card(label: str, value: str, delta: str = "", color: str = COLORS["text"]) -> html.Div:
+def kpi_card(label, value, delta="", color=COLORS["text"]):
     return html.Div(
         [
             html.P(label, style={"margin": "0 0 4px", "fontSize": "12px", "color": COLORS["muted"]}),
             html.P(value, style={"margin": "0 0 2px", "fontSize": "26px", "fontWeight": "500", "color": color}),
-            html.P(delta, style={"margin": "0",       "fontSize": "12px", "color": COLORS["muted"]}),
+            html.P(delta, style={"margin": "0", "fontSize": "12px", "color": COLORS["muted"]}),
         ],
         style={
-            "background": "#F1EFE8",
-            "borderRadius": "8px",
-            "padding": "14px 18px",
-            "flex": "1",
-            "minWidth": "150px",
+            "background": "#F1EFE8", "borderRadius": "8px",
+            "padding": "14px 18px", "flex": "1", "minWidth": "150px",
         },
     )
 
 # =========================================
-# APP — single instance, defined once
-# FIX 2: Removed the duplicate `app = Dash(__name__)` at the bottom
-#         which was overwriting the layout with None.
+# APP
 # =========================================
 app = Dash(__name__, title="Churn Dashboard")
 
@@ -158,11 +169,10 @@ app.layout = html.Div(
         html.Div(
             [
                 html.Span("📊", style={"fontSize": "18px"}),
-                html.Span(
-                    "Customer Churn Dashboard",
-                    style={"fontWeight": "500", "fontSize": "16px", "marginLeft": "8px"},
-                ),
-                html.Span("Telco · 2024", style={"color": COLORS["muted"], "fontSize": "13px", "marginLeft": "auto"}),
+                html.Span("Customer Churn Dashboard",
+                          style={"fontWeight": "500", "fontSize": "16px", "marginLeft": "8px"}),
+                html.Span("Telco · 2024",
+                          style={"color": COLORS["muted"], "fontSize": "13px", "marginLeft": "auto"}),
             ],
             style={
                 "display": "flex", "alignItems": "center",
@@ -180,9 +190,9 @@ app.layout = html.Div(
                 # ── KPI Cards ──
                 html.Div(
                     [
-                        kpi_card("Total customers", f"{total_customers:,}", "Active accounts"),
-                        kpi_card("Churn rate", f"{churn_rate}%", "+2.1pp vs last quarter", COLORS["danger"]),
-                        kpi_card("Avg tenure", f"{avg_tenure} mo", "Across all contracts"),
+                        kpi_card("Total customers",    f"{total_customers:,}", "Active accounts"),
+                        kpi_card("Churn rate",         f"{churn_rate}%",       "+2.1pp vs last quarter", COLORS["danger"]),
+                        kpi_card("Avg tenure",         f"{avg_tenure} mo",     "Across all contracts"),
                         kpi_card("Avg monthly charge", f"${avg_monthly_charge}", "Per customer"),
                     ],
                     style={"display": "flex", "gap": "12px", "flexWrap": "wrap", "marginBottom": "24px"},
@@ -191,14 +201,12 @@ app.layout = html.Div(
                 # ── Filter Row ──
                 html.Div(
                     [
-                        html.Label(
-                            "Filter by contract:",
-                            style={"fontSize": "13px", "color": COLORS["muted"], "marginRight": "8px"},
-                        ),
+                        html.Label("Filter by contract:",
+                                   style={"fontSize": "13px", "color": COLORS["muted"], "marginRight": "8px"}),
                         dcc.Dropdown(
                             id="contract-filter",
                             options=[{"label": "All contracts", "value": "All"}]
-                                    + [{"label": v, "value": v} for v in df["Contract"].unique()],
+                                    + [{"label": v, "value": v} for v in sorted(df["Contract"].unique())],
                             value="All",
                             clearable=False,
                             style={"width": "220px", "fontSize": "13px"},
@@ -207,17 +215,19 @@ app.layout = html.Div(
                     style={"display": "flex", "alignItems": "center", "marginBottom": "24px"},
                 ),
 
-                # ── Row 1: Contract + Tenure charts ──
+                # ── Row 1: Contract + Tenure ──
                 html.Div(
                     [
                         html.Div(
-                            [html.P("Churn rate by contract type", style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
+                            [html.P("Churn rate by contract type",
+                                    style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
                              dcc.Graph(id="chart-contract", config={"displayModeBar": False})],
                             style={"background": COLORS["card_bg"], "borderRadius": "12px",
                                    "border": f"0.5px solid {COLORS['border']}", "padding": "16px", "flex": "1"},
                         ),
                         html.Div(
-                            [html.P("Churn rate by tenure group", style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
+                            [html.P("Churn rate by tenure group",
+                                    style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
                              dcc.Graph(id="chart-tenure", config={"displayModeBar": False})],
                             style={"background": COLORS["card_bg"], "borderRadius": "12px",
                                    "border": f"0.5px solid {COLORS['border']}", "padding": "16px", "flex": "1"},
@@ -230,13 +240,15 @@ app.layout = html.Div(
                 html.Div(
                     [
                         html.Div(
-                            [html.P("Monthly charges vs tenure", style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
+                            [html.P("Monthly charges vs tenure",
+                                    style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
                              dcc.Graph(id="chart-scatter", config={"displayModeBar": False})],
                             style={"background": COLORS["card_bg"], "borderRadius": "12px",
                                    "border": f"0.5px solid {COLORS['border']}", "padding": "16px", "flex": "2", "minWidth": "280px"},
                         ),
                         html.Div(
-                            [html.P("Churn distribution", style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
+                            [html.P("Churn distribution",
+                                    style={"margin": "0 0 8px", "fontSize": "13px", "fontWeight": "500", "color": COLORS["muted"]}),
                              dcc.Graph(id="chart-pie", config={"displayModeBar": False})],
                             style={"background": COLORS["card_bg"], "borderRadius": "12px",
                                    "border": f"0.5px solid {COLORS['border']}", "padding": "16px", "flex": "1", "minWidth": "240px"},
