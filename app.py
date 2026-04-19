@@ -33,7 +33,7 @@ CHART_LAYOUT = dict(
 # =========================================
 # LOAD & CLEAN DATA
 # =========================================
-def load_data(path: str = "C:/Users/Ramsai vakkapatla/Downloads/WA_Fn-UseC_-Telco-Customer-Churn.csv") -> pd.DataFrame:
+def load_data(path: str = "WA_Fn-UseC_-Telco-Customer-Churn.csv") -> pd.DataFrame:
     df = pd.read_csv(path)
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce")
     df["TotalCharges"].fillna(df["TotalCharges"].median(), inplace=True)
